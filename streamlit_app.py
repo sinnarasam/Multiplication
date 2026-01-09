@@ -2,6 +2,9 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
+import requests
+from io import BytesIO
+from PIL import Image
 
 st.set_page_config(page_title="곱셈 학습 앱", layout="wide")
 
@@ -22,8 +25,15 @@ num2 = st.sidebar.number_input("두 번째 숫자를 입력하세요", min_value
 
 visualization_type = st.sidebar.selectbox(
     "시각화 방법을 선택하세요",
-    ["⭕ 동그라미", "⬜ 사각형", "🟩 색칠된 칸", "🎨 무지개 칸"]
+    ["⭕ 동그라미", "⬜ 사각형", "🟩 색칠된 칸", "🎨 무지개 칸", "🍪 이미지(캐릭터/음식)"]
 )
+
+# 이미지 카테고리 선택 (이미지 옵션 선택 시)
+image_category = None
+if visualization_type == "🍪 이미지(캐릭터/음식)":
+    image_category = st.sidebar.selectbox("이미지 종류를 선택하세요", ["음식", "캐릭터"]) 
+    # 내부 키값
+    image_category = "food" if image_category == "음식" else "character"
 
 # 시각화 함수들
 def visualize_circles(num1, num2):
@@ -108,6 +118,54 @@ def visualize_rainbow_grid(num1, num2):
     plt.tight_layout()
     return fig
 
+
+# 이미지 로드 캐시
+@st.cache_data
+def load_image_from_url(url):
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    return Image.open(BytesIO(resp.content)).convert("RGBA")
+
+
+def visualize_images(num1, num2, category="food"):
+    """이미지(캐릭터/음식)로 시각화"""
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # 트위모지 CDN에서 간단한 이모지 이미지를 사용
+    emoji_sets = {
+        "food": [
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f355.png",  # pizza
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f354.png",  # burger
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f35f.png",  # fries
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f34e.png",  # apple
+        ],
+        "character": [
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f431.png",  # cat
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f436.png",  # dog
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f60a.png",  # smiling face
+            "https://twemoji.maxcdn.com/v/latest/72x72/1f47b.png",  # ghost (cute)
+        ]
+    }
+
+    urls = emoji_sets.get(category, emoji_sets["food"])
+
+    # 미리 로드
+    images = [load_image_from_url(u) for u in urls]
+
+    for i in range(num1):
+        for j in range(num2):
+            img = images[(i * num2 + j) % len(images)]
+            # 이미지 크기와 위치를 맞춰 그리기
+            extent = (j, j + 0.9, num1 - i - 1, num1 - i - 1 + 0.9)
+            ax.imshow(img, extent=extent, aspect='auto')
+
+    ax.set_xlim(-0.5, num2 + 0.5)
+    ax.set_ylim(-0.5, num1 + 0.5)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    plt.tight_layout()
+    return fig
+
 # 메인 콘텐츠
 col1, col2 = st.columns([1, 1])
 
@@ -120,8 +178,10 @@ with col1:
         fig = visualize_squares(int(num1), int(num2))
     elif visualization_type == "🟩 색칠된 칸":
         fig = visualize_colored_grid(int(num1), int(num2))
-    else:  # 🎨 무지개 칸
+    elif visualization_type == "🎨 무지개 칸":
         fig = visualize_rainbow_grid(int(num1), int(num2))
+    else:  # 🍪 이미지(캐릭터/음식)
+        fig = visualize_images(int(num1), int(num2), category=image_category or "food")
     
     st.pyplot(fig)
 
